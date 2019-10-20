@@ -32,24 +32,25 @@ namespace crawler
             InitializeComponent();
 
         }
-
+        
         private void crawler_Load(object sender, EventArgs e)
         {
+            this.TopMost = true;
             if (CheckForInternetConnection())
             {
 
                 lblip.Text = GetPublicIP();
-                lblstarttime.Text = DateTime.Now.ToString();
+               
                 refreshgrid2();
                 refreshgrid1();
-                //dataGridView2.DataBind();
-                //Thread timer = new Thread(start);
-                //timer.Start();
+          
 
             }
             else
             {
                 lblip.Text = "You Are Not have Internet Access Please Connect To Internet and Retry";
+                button1.Enabled = false;
+                button2.Enabled = false;
             }
 
         }
@@ -81,8 +82,11 @@ namespace crawler
         }
         private void refreshgrid1()
         {
-            dataGridView1.DataSource = ThreadList;
+            dataGridView1.DataSource = null;
+            dataGridView1.Rows.Clear();
+            dataGridView1.DataSource = ThreadList;         
             dataGridView1.Refresh();
+            dataGridView1.Update();
         }
         private void writegrid2()
         {
@@ -127,6 +131,7 @@ namespace crawler
             public string Url { get; set; }
 
         }
+        
         public static class Pages
         {
             public static int Row { get; set; }
@@ -134,31 +139,41 @@ namespace crawler
             public static int Page { get; set; }
             public static Keywords key { get; set; }
         }
+        public DateTime startd;
         private void button1_Click(object sender, EventArgs e)
+        {
+            startd = DateTime.Now;
+            lblstarttime.Text = DateTime.Now.ToString();
+            timer2.Start();
+            Thread thread = new Thread(start);
+            thread.Start();
+            timer1.Start();
+        }
+        private void start()
         {
             working = true;
 
-            foreach(Keywords key in KeywordList.OrderBy(c=>c.count))
+            foreach (Keywords key in KeywordList.OrderBy(c => c.count))
             {
                 Pages.key = key;
                 Pages.Row = 1;
                 Pages.Page = 1;
                 Pages.TotalRow = 1;
-                if (nextkeyword==true)
-                {
-                    nextkeyword = false;
-                    goto exit;
-                }
+
                 while (working)
                 {
-                    
-                    if (Pages.key==key && Pages.Page>10)
+                    if (nextkeyword == true)
+                    {
+                        nextkeyword = false;
+                        goto exit;
+                    }
+
+                    if (Pages.key == key && Pages.Page > 10)
                     {
                         goto exit;
                     }
                     if (nextthread == true)
                     {
-                        refreshgrid1();
                         ParameterizedThreadStart threadStart = new ParameterizedThreadStart(startthread);
                         Thread thread = new Thread(threadStart);
                         thread.Start(new PrintNumberParameters() { keywords = key });
@@ -166,16 +181,13 @@ namespace crawler
                     }
                     Thread.Sleep(5000);
                 }
-                exit:
-                KeywordList[key.ID-1].count++;
-                writegrid2();
-                refreshgrid2();
-                refreshgrid1();
+            exit:
+                KeywordList[key.ID - 1].count++;
+
+
             }
             lblendtime.Text = DateTime.Now.ToString();
-
         }
-
         private void startthread(object data)
         {
             try
@@ -217,8 +229,10 @@ namespace crawler
                         ReadOnlyCollection<IWebElement> searchResult = driver.FindElements(By.Id("pnnext"));
                         if (searchResult.Count > 0)
                         {
+                            Thread.Sleep(2000);
                             IWebElement next = driver.FindElement(By.Id("pnnext"));
                             next.Click();
+                            
                         }
                         else
                         {
@@ -229,6 +243,10 @@ namespace crawler
                 }
 
             search:
+                if (Pages.Page > 10)
+                {
+                    goto exit;
+                }
                 ReadOnlyCollection<IWebElement> searchResults = driver.FindElements(By.PartialLinkText("joorkadeh"));
                 Pages.TotalRow = searchResults.Count;
                 if (searchResults.Count > 0)
@@ -256,6 +274,7 @@ namespace crawler
                         next.Click();
                         Pages.Page++;
                         Pages.Row = 1;
+                        Thread.Sleep(2000);
                         goto search;
                     }
                     else
@@ -310,14 +329,16 @@ namespace crawler
             exit:
                 thread.Status = "stopped";
                 thread.Ended = DateTime.Now;
+                
+              
+   
+                driver.Close();
+                driver.Dispose();
                 nextthread = true;
                 if (Pages.Page > 10)
                 {
                     nextkeyword = true;
                 }
-                //refreshgrid1();
-                driver.Close();
-                driver.Dispose();
             }
             catch
             {
@@ -331,8 +352,26 @@ namespace crawler
 
         private void button2_Click(object sender, EventArgs e)
         {
+            timer1.Stop();
+            timer2.Stop();
             working = false;
             lblendtime.Text = DateTime.Now.ToString();
+        }
+
+        private void timer1_Tick(object sender, EventArgs e)
+        {
+            refreshgrid1();
+            refreshgrid2();
+        }
+
+        private void timer2_Tick(object sender, EventArgs e)
+        {
+            TimeSpan a = DateTime.Now - startd;
+            lblelapsedtime.Text = a.ToString();
+            lbltotalthread.Text = ThreadList.Count.ToString();
+            lbltotalkey.Text = KeywordList.Count.ToString();
+            lbltotalpages.Text = ThreadList.Where(c => !string.IsNullOrEmpty(c.Url)).Count().ToString();
+            lbltotalkeyc.Text = ThreadList.Select(c => c.Keyword).Distinct().Count().ToString();
         }
     }
 }
