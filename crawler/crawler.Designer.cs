@@ -40,7 +40,6 @@
             this.label2 = new System.Windows.Forms.Label();
             this.lblelapsedtime = new System.Windows.Forms.Label();
             this.dataGridView2 = new System.Windows.Forms.DataGridView();
-            this.dataGridView1 = new System.Windows.Forms.DataGridView();
             this.timer1 = new System.Windows.Forms.Timer(this.components);
             this.timer2 = new System.Windows.Forms.Timer(this.components);
             this.label3 = new System.Windows.Forms.Label();
@@ -51,6 +50,11 @@
             this.label6 = new System.Windows.Forms.Label();
             this.lbltotalkey = new System.Windows.Forms.Label();
             this.lbltotalkeyc = new System.Windows.Forms.Label();
+            this.label7 = new System.Windows.Forms.Label();
+            this.label8 = new System.Windows.Forms.Label();
+            this.lblthreadfailed = new System.Windows.Forms.Label();
+            this.lblcrawled = new System.Windows.Forms.Label();
+            this.dataGridView1 = new System.Windows.Forms.DataGridView();
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView1)).BeginInit();
             this.SuspendLayout();
@@ -138,7 +142,7 @@
             // lblelapsedtime
             // 
             this.lblelapsedtime.AutoSize = true;
-            this.lblelapsedtime.Location = new System.Drawing.Point(133, 127);
+            this.lblelapsedtime.Location = new System.Drawing.Point(140, 127);
             this.lblelapsedtime.Name = "lblelapsedtime";
             this.lblelapsedtime.Size = new System.Drawing.Size(0, 13);
             this.lblelapsedtime.TabIndex = 9;
@@ -156,24 +160,9 @@
             this.dataGridView2.Size = new System.Drawing.Size(224, 209);
             this.dataGridView2.TabIndex = 11;
             // 
-            // dataGridView1
-            // 
-            this.dataGridView1.AllowUserToAddRows = false;
-            this.dataGridView1.AllowUserToDeleteRows = false;
-            this.dataGridView1.AllowUserToResizeRows = false;
-            this.dataGridView1.Location = new System.Drawing.Point(10, 220);
-            this.dataGridView1.MultiSelect = false;
-            this.dataGridView1.Name = "dataGridView1";
-            this.dataGridView1.ReadOnly = true;
-            this.dataGridView1.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            this.dataGridView1.ShowCellErrors = false;
-            this.dataGridView1.ShowRowErrors = false;
-            this.dataGridView1.Size = new System.Drawing.Size(722, 225);
-            this.dataGridView1.TabIndex = 12;
-            // 
             // timer1
             // 
-            this.timer1.Interval = 10000;
+            this.timer1.Interval = 20000;
             this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
             // 
             // timer2
@@ -201,7 +190,7 @@
             // label4
             // 
             this.label4.AutoSize = true;
-            this.label4.Location = new System.Drawing.Point(37, 173);
+            this.label4.Location = new System.Drawing.Point(275, 195);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(111, 13);
             this.label4.TabIndex = 15;
@@ -210,7 +199,7 @@
             // lbltotalpages
             // 
             this.lbltotalpages.AutoSize = true;
-            this.lbltotalpages.Location = new System.Drawing.Point(155, 173);
+            this.lbltotalpages.Location = new System.Drawing.Point(425, 195);
             this.lbltotalpages.Name = "lbltotalpages";
             this.lbltotalpages.Size = new System.Drawing.Size(0, 13);
             this.lbltotalpages.TabIndex = 16;
@@ -249,12 +238,60 @@
             this.lbltotalkeyc.Size = new System.Drawing.Size(0, 13);
             this.lbltotalkeyc.TabIndex = 20;
             // 
+            // label7
+            // 
+            this.label7.AutoSize = true;
+            this.label7.Location = new System.Drawing.Point(37, 172);
+            this.label7.Name = "label7";
+            this.label7.Size = new System.Drawing.Size(68, 13);
+            this.label7.TabIndex = 21;
+            this.label7.Text = "Total Failed :";
+            // 
+            // label8
+            // 
+            this.label8.AutoSize = true;
+            this.label8.Location = new System.Drawing.Point(37, 195);
+            this.label8.Name = "label8";
+            this.label8.Size = new System.Drawing.Size(78, 13);
+            this.label8.TabIndex = 22;
+            this.label8.Text = "Total Crawled :";
+            // 
+            // lblthreadfailed
+            // 
+            this.lblthreadfailed.AutoSize = true;
+            this.lblthreadfailed.Location = new System.Drawing.Point(155, 172);
+            this.lblthreadfailed.Name = "lblthreadfailed";
+            this.lblthreadfailed.Size = new System.Drawing.Size(0, 13);
+            this.lblthreadfailed.TabIndex = 23;
+            // 
+            // lblcrawled
+            // 
+            this.lblcrawled.AutoSize = true;
+            this.lblcrawled.Location = new System.Drawing.Point(155, 195);
+            this.lblcrawled.Name = "lblcrawled";
+            this.lblcrawled.Size = new System.Drawing.Size(0, 13);
+            this.lblcrawled.TabIndex = 24;
+            // 
+            // dataGridView1
+            // 
+            this.dataGridView1.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dataGridView1.Location = new System.Drawing.Point(1, 250);
+            this.dataGridView1.Name = "dataGridView1";
+            this.dataGridView1.RowHeadersVisible = false;
+            this.dataGridView1.Size = new System.Drawing.Size(740, 150);
+            this.dataGridView1.TabIndex = 25;
+            // 
             // crawler
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.SystemColors.ButtonHighlight;
             this.ClientSize = new System.Drawing.Size(744, 457);
+            this.Controls.Add(this.dataGridView1);
+            this.Controls.Add(this.lblcrawled);
+            this.Controls.Add(this.lblthreadfailed);
+            this.Controls.Add(this.label8);
+            this.Controls.Add(this.label7);
             this.Controls.Add(this.lbltotalkeyc);
             this.Controls.Add(this.lbltotalkey);
             this.Controls.Add(this.label6);
@@ -263,7 +300,6 @@
             this.Controls.Add(this.label4);
             this.Controls.Add(this.lbltotalthread);
             this.Controls.Add(this.label3);
-            this.Controls.Add(this.dataGridView1);
             this.Controls.Add(this.dataGridView2);
             this.Controls.Add(this.lblelapsedtime);
             this.Controls.Add(this.label2);
@@ -300,7 +336,6 @@
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.Label lblelapsedtime;
         private System.Windows.Forms.DataGridView dataGridView2;
-        private System.Windows.Forms.DataGridView dataGridView1;
         private System.Windows.Forms.Timer timer1;
         private System.Windows.Forms.Timer timer2;
         private System.Windows.Forms.Label label3;
@@ -311,5 +346,10 @@
         private System.Windows.Forms.Label label6;
         private System.Windows.Forms.Label lbltotalkey;
         private System.Windows.Forms.Label lbltotalkeyc;
+        private System.Windows.Forms.Label label7;
+        private System.Windows.Forms.Label label8;
+        private System.Windows.Forms.Label lblthreadfailed;
+        private System.Windows.Forms.Label lblcrawled;
+        private System.Windows.Forms.DataGridView dataGridView1;
     }
 }

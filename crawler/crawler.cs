@@ -87,13 +87,32 @@ namespace crawler
             dataGridView1.Rows.Clear();
             dataGridView1.DataSource = ThreadList;         
             dataGridView1.Refresh();
-            dataGridView1.Update();
+
         }
         private void writegrid2()
         {
-            string jsonpath = Environment.CurrentDirectory + @"\keyword.json";
-            string dynamic = JsonConvert.SerializeObject(KeywordList);
-            System.IO.File.WriteAllText(jsonpath, dynamic);
+            try
+            {
+                start:
+                string jsonpath = Environment.CurrentDirectory + @"\keyword.json";
+                FileInfo f = new FileInfo(jsonpath);
+                if (!IsFileLocked(f)&&KeywordList.Count>0)
+                {
+                    string dynamic = JsonConvert.SerializeObject(KeywordList);
+                    System.IO.File.WriteAllText(jsonpath, dynamic);
+                }
+                else
+                {
+                    Thread.Sleep(20000);
+                    goto start;
+                }
+               
+            }
+           
+            catch
+            {
+
+            }
         }
         private void Elapsedtime()
         {
@@ -152,6 +171,7 @@ namespace crawler
         }
         private void start()
         {
+            start:
             working = true;
 
             foreach (Keywords key in KeywordList.OrderBy(c => c.count))
@@ -173,7 +193,7 @@ namespace crawler
                     {
                         goto exit;
                     }
-                    if (nextthread == true && ThreadList.Where(c => c.Status == "running").Count() <=5)
+                    if (nextthread == true && ThreadList.Where(c => c.Status == "Running").Count() <=5)
                     {
                         ParameterizedThreadStart threadStart = new ParameterizedThreadStart(startthread);
                         Thread thread = new Thread(threadStart);
@@ -187,22 +207,25 @@ namespace crawler
                 writegrid2();
 
             }
+            goto start;
             
         }
         bool chrome = true;
         private void startthread(object data)
         {
+            nextthread = false;
             PrintNumberParameters parameters = (PrintNumberParameters)data;
-
             thread thread = new thread();
             thread.ThreadNO = ThreadList.Count + 1;
             thread.Started = DateTime.Now;
-            thread.Status = "running";
+            thread.Status = "Running";
             thread.Keyword = parameters.keywords;
             thread.Page = 1;
             thread.Row = 0;
             ThreadList.Add(thread);
+
             IWebDriver driver;
+
             if (!File.Exists(@"C:\Program Files\Mozilla Firefox\firefox.exe"))
             {
                 chrome = true;
@@ -210,46 +233,52 @@ namespace crawler
             if (chrome == false)
             {
                 FirefoxDriverService service = FirefoxDriverService.CreateDefaultService();
+                
                 service.FirefoxBinaryPath = @"C:\Program Files\Mozilla Firefox\firefox.exe";
+                service.HideCommandPromptWindow=true;
+                service.ConnectToRunningBrowser=true;
                 driver = new FirefoxDriver(service);
                 chrome = true;
             }
             else
             {
-                driver = new ChromeDriver();
+                var driverService = ChromeDriverService.CreateDefaultService();
+                driverService.HideCommandPromptWindow = true;
+                driverService.SuppressInitialDiagnosticInformation = true;
+                
+                driver = new ChromeDriver(driverService, new ChromeOptions());
                 chrome = false;
             }
 
             try
             {
-                nextthread = false;
-               
-              
                 
-               
+                driver.Manage().Window.Minimize();
                 driver.Navigate().GoToUrl("https://www.google.com/");
-                //driver.Manage().Window.Minimize();
+                
+                
                 IWebElement element = driver.FindElement(By.Name("q"));
                 element.SendKeys(parameters.keywords.keyword);
 
                 Thread.Sleep(2000);
                 IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
                 executor.ExecuteScript("document.getElementsByName('btnK')[0].click();");
-                Thread.Sleep(2000);
 
+                
                 ReadOnlyCollection<IWebElement> elemnt = driver.FindElements(By.Id("rc-anchor-container"));
                 if (elemnt.Count>0)
                 {
-                    
+                    MessageBox.Show("گوگل برنامه را ربات شناخته ابتدا وی پی ان را تغیر دهید و مجدد امتحان کنید");
+                    goto exit;
                 }
-
+                Thread.Sleep(2000);
                 if (Pages.key == parameters.keywords && Pages.Page > 1)
                 {
                     if (Pages.Page > 10)
                     {
                         goto exit;
                     }
-                    for (int i = 1; i < Pages.Page; i++)
+                    for (int i = 1; i <= Pages.Page; i++)
                     {
                         ReadOnlyCollection<IWebElement> searchResult = driver.FindElements(By.Id("pnnext"));
                         if (searchResult.Count > 0)
@@ -257,6 +286,7 @@ namespace crawler
                             Thread.Sleep(2000);
                             IWebElement next = driver.FindElement(By.Id("pnnext"));
                             next.Click();
+                            thread.Page++;
                             
                         }
                         else
@@ -285,8 +315,7 @@ namespace crawler
                     if (Pages.TotalRow < Pages.Row)
                     {
                         Pages.Page++;
-                        Pages.Row = 1;
-                       
+                        Pages.Row = 1;        
                     }
                    
                 }
@@ -299,6 +328,7 @@ namespace crawler
                         next.Click();
                         Pages.Page++;
                         Pages.Row = 1;
+                        thread.Page = 1;
                         Thread.Sleep(2000);
                         goto search;
                     }
@@ -352,7 +382,7 @@ namespace crawler
                 }
                 sw.Stop();
             exit:
-                thread.Status = "stopped";
+                thread.Status = "Ended";
                 thread.Ended = DateTime.Now;
                 
               
@@ -367,12 +397,11 @@ namespace crawler
             }
             catch
             {
-                thread.Status = "stopped";
+                thread.Status = "Stopped";
                 thread.Ended = DateTime.Now;
-                driver.Close();
                 driver.Dispose();
                 nextthread = true;
-                if (Pages.Page>11)
+                if (Pages.Page>10)
                 {
                     nextkeyword = true;
                 }
@@ -401,6 +430,51 @@ namespace crawler
             lbltotalkey.Text = KeywordList.Count.ToString();
             lbltotalpages.Text = ThreadList.Where(c => !string.IsNullOrEmpty(c.Url)).Count().ToString();
             lbltotalkeyc.Text = ThreadList.Select(c => c.Keyword).Distinct().Count().ToString();
+            lblthreadfailed.Text= ThreadList.Where(c => c.Status=="Stopped").Count().ToString();
+            lblcrawled.Text = ThreadList.Where(c => c.Status == "Ended"&&string.IsNullOrEmpty(c.Url)).Count().ToString();
+        }
+        protected virtual bool IsFileLocked(FileInfo file)
+        {
+            FileStream stream = null;
+
+            try
+            {
+                stream = file.Open(FileMode.Open, FileAccess.Read, FileShare.None);
+            }
+            catch (IOException)
+            {
+                return true;
+            }
+            finally
+            {
+                if (stream != null)
+                    stream.Close();
+            }
+
+            return false;
+        }
+
+       
+
+        private void dataGridView1_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (e.ColumnIndex==3 && e.Value.ToString()=="Stopped")
+            {
+                e.CellStyle.BackColor = Color.Red;
+            }
+            if (e.ColumnIndex == 3 && e.Value.ToString() == "Running")
+            {
+                e.CellStyle.BackColor = Color.Green;
+            }
+            if (e.ColumnIndex == 3 && e.Value.ToString() == "Ended")
+            {
+                e.CellStyle.BackColor = Color.Yellow;
+            }
+        }
+
+        private void dataGridView1_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex == -1) return;
         }
     }
 }
