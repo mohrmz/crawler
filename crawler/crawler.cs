@@ -16,6 +16,7 @@ using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using System.Collections.ObjectModel;
 using Newtonsoft.Json;
+using OpenQA.Selenium.Firefox;
 
 namespace crawler
 {
@@ -172,7 +173,7 @@ namespace crawler
                     {
                         goto exit;
                     }
-                    if (nextthread == true)
+                    if (nextthread == true && ThreadList.Where(c => c.Status == "running").Count() <=5)
                     {
                         ParameterizedThreadStart threadStart = new ParameterizedThreadStart(startthread);
                         Thread thread = new Thread(threadStart);
@@ -183,33 +184,51 @@ namespace crawler
                 }
             exit:
                 KeywordList[key.ID - 1].count++;
-
+                writegrid2();
 
             }
-            lblendtime.Text = DateTime.Now.ToString();
+            
         }
+        bool chrome = true;
         private void startthread(object data)
         {
+            PrintNumberParameters parameters = (PrintNumberParameters)data;
+
+            thread thread = new thread();
+            thread.ThreadNO = ThreadList.Count + 1;
+            thread.Started = DateTime.Now;
+            thread.Status = "running";
+            thread.Keyword = parameters.keywords;
+            thread.Page = 1;
+            thread.Row = 0;
+            ThreadList.Add(thread);
+            IWebDriver driver;
+            if (!File.Exists(@"C:\Program Files\Mozilla Firefox\firefox.exe"))
+            {
+                chrome = true;
+            }
+            if (chrome == false)
+            {
+                FirefoxDriverService service = FirefoxDriverService.CreateDefaultService();
+                service.FirefoxBinaryPath = @"C:\Program Files\Mozilla Firefox\firefox.exe";
+                driver = new FirefoxDriver(service);
+                chrome = true;
+            }
+            else
+            {
+                driver = new ChromeDriver();
+                chrome = false;
+            }
+
             try
             {
                 nextthread = false;
                
-                PrintNumberParameters parameters = (PrintNumberParameters)data;
-
-                thread thread = new thread();
-                thread.ThreadNO = ThreadList.Count + 1;
-                thread.Started = DateTime.Now;
-                thread.Status = "running";
-                thread.Keyword = parameters.keywords;
-                thread.Page = 1;
-                thread.Row = 0;
-
-                ThreadList.Add(thread);
-
-
-                IWebDriver driver = new ChromeDriver();
+              
+                
+               
                 driver.Navigate().GoToUrl("https://www.google.com/");
-
+                //driver.Manage().Window.Minimize();
                 IWebElement element = driver.FindElement(By.Name("q"));
                 element.SendKeys(parameters.keywords.keyword);
 
@@ -217,6 +236,12 @@ namespace crawler
                 IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
                 executor.ExecuteScript("document.getElementsByName('btnK')[0].click();");
                 Thread.Sleep(2000);
+
+                ReadOnlyCollection<IWebElement> elemnt = driver.FindElements(By.Id("rc-anchor-container"));
+                if (elemnt.Count>0)
+                {
+                    
+                }
 
                 if (Pages.key == parameters.keywords && Pages.Page > 1)
                 {
@@ -342,6 +367,10 @@ namespace crawler
             }
             catch
             {
+                thread.Status = "stopped";
+                thread.Ended = DateTime.Now;
+                driver.Close();
+                driver.Dispose();
                 nextthread = true;
                 if (Pages.Page>11)
                 {
