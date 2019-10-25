@@ -18,6 +18,7 @@ using System.Collections.ObjectModel;
 using Newtonsoft.Json;
 using OpenQA.Selenium.Firefox;
 
+
 namespace crawler
 {
     public partial class crawler : Form
@@ -36,7 +37,7 @@ namespace crawler
         
         private void crawler_Load(object sender, EventArgs e)
         {
-            this.TopMost = true;
+            //this.TopMost = true;
             if (CheckForInternetConnection())
             {
 
@@ -81,13 +82,46 @@ namespace crawler
             dataGridView2.DataSource = dynamicObject;
             dataGridView2.Refresh();
         }
+
         private void refreshgrid1()
         {
-            dataGridView1.DataSource = null;
-            dataGridView1.Rows.Clear();
-            dataGridView1.DataSource = ThreadList;         
-            dataGridView1.Refresh();
 
+           
+            string json = Newtonsoft.Json.JsonConvert.SerializeObject(ThreadList);
+            dynamic a = JsonConvert.DeserializeObject(json);
+
+            
+            dataGridView1.DataSource = a;
+
+            
+
+        }
+        static DataTable ConvertListToDataTable(List<thread[]> list)
+        {
+            DataTable table = new DataTable();
+
+            int columns = 0;
+            foreach (var array in list)
+            {
+                if (array.Length > columns)
+                {
+                    columns = array.Length;
+                }
+            }
+
+
+           for (int i = 0; i < columns; i++)
+            {
+                table.Columns.Add();
+            }
+
+
+            foreach (var array in list)
+            {
+                table.Rows.Add(array);
+            }
+
+            return table;
         }
         private void writegrid2()
         {
@@ -136,7 +170,7 @@ namespace crawler
         }
         public class PrintNumberParameters
         {
-            public Keywords keywords { get; set; }
+            public string keywords { get; set; }
 
         }
         public class thread
@@ -145,7 +179,7 @@ namespace crawler
             public DateTime Started { get; set; }
             public DateTime Ended { get; set; }
             public string Status { get; set; }
-            public Keywords Keyword { get; set; }
+            public string Keyword { get; set; }
             public int Page { get; set; }
             public int Row { get; set; }
             public string Url { get; set; }
@@ -197,7 +231,7 @@ namespace crawler
                     {
                         ParameterizedThreadStart threadStart = new ParameterizedThreadStart(startthread);
                         Thread thread = new Thread(threadStart);
-                        thread.Start(new PrintNumberParameters() { keywords = key });
+                        thread.Start(new PrintNumberParameters() { keywords = key.keyword });
 
                     }
                     Thread.Sleep(5000);
@@ -225,28 +259,31 @@ namespace crawler
             ThreadList.Add(thread);
 
             IWebDriver driver;
-
+            FirefoxDriverService service;
+            ChromeDriverService driverService;
             if (!File.Exists(@"C:\Program Files\Mozilla Firefox\firefox.exe"))
             {
                 chrome = true;
             }
             if (chrome == false)
             {
-                FirefoxDriverService service = FirefoxDriverService.CreateDefaultService();
+                service = FirefoxDriverService.CreateDefaultService();
                 
                 service.FirefoxBinaryPath = @"C:\Program Files\Mozilla Firefox\firefox.exe";
                 service.HideCommandPromptWindow=true;
-                service.ConnectToRunningBrowser=true;
+                
                 driver = new FirefoxDriver(service);
+                
                 chrome = true;
             }
             else
             {
-                var driverService = ChromeDriverService.CreateDefaultService();
+                driverService = ChromeDriverService.CreateDefaultService();
                 driverService.HideCommandPromptWindow = true;
                 driverService.SuppressInitialDiagnosticInformation = true;
                 
                 driver = new ChromeDriver(driverService, new ChromeOptions());
+              
                 chrome = false;
             }
 
@@ -258,7 +295,7 @@ namespace crawler
                 
                 
                 IWebElement element = driver.FindElement(By.Name("q"));
-                element.SendKeys(parameters.keywords.keyword);
+                element.SendKeys(parameters.keywords);
 
                 Thread.Sleep(2000);
                 IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
@@ -272,7 +309,7 @@ namespace crawler
                     goto exit;
                 }
                 Thread.Sleep(2000);
-                if (Pages.key == parameters.keywords && Pages.Page > 1)
+                if (Pages.key.keyword == parameters.keywords && Pages.Page > 1)
                 {
                     if (Pages.Page > 10)
                     {
@@ -378,8 +415,21 @@ namespace crawler
                     {
                         javaScript.ExecuteScript(" window.scrollTo(0,window.pageYOffset-1) ");
                     }
-
+                    ReadOnlyCollection<IWebElement> searchResultss = driver.FindElements(By.ClassName("nav-link"));
+                    foreach(var a in searchResultss)
+                    {
+                        a.Click();
+                        Thread.Sleep(3000);
+                    }
                 }
+                ReadOnlyCollection<IWebElement> eelement = driver.FindElements(By.LinkText("http://joorkadeh.com"));
+                if (eelement.Count > 0)
+                {
+                    IWebElement next = driver.FindElement(By.LinkText("http://joorkadeh.com"));
+                    next.Click();
+                    Thread.Sleep(34000);
+                }
+
                 sw.Stop();
             exit:
                 thread.Status = "Ended";
@@ -395,7 +445,7 @@ namespace crawler
                     nextkeyword = true;
                 }
             }
-            catch
+            catch(Exception exception)
             {
                 thread.Status = "Stopped";
                 thread.Ended = DateTime.Now;
@@ -476,5 +526,7 @@ namespace crawler
         {
             if (e.RowIndex == -1) return;
         }
+
+       
     }
 }
