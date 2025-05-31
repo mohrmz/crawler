@@ -25,7 +25,7 @@ namespace crawler
         volatile bool nextkeyword = false;
         volatile bool chrome = true;
         List<Keywords> KeywordList = new List<Keywords>();
-        List<thread>   ThreadList  = new List<thread>();
+        List<SelfThread>   ThreadList  = new List<SelfThread>();
         System.Globalization.CultureInfo fair = new System.Globalization.CultureInfo("fa-IR");
         public crawler()
         {
@@ -67,6 +67,7 @@ namespace crawler
                 return false;
             }
         }
+
         private static string GetPublicIP()
         {
             try
@@ -83,22 +84,24 @@ namespace crawler
         }
         private void refreshgrid2()
         {
-        start:
-            string jsonpath = Environment.CurrentDirectory + @"\keyword.json";
-            FileInfo f = new FileInfo(jsonpath);
-            if (!IsFileLocked(f))
+            while(true)
             {
-                string json = File.ReadAllText(jsonpath);
-                KeywordList.Clear();
-                KeywordList = JsonConvert.DeserializeObject<List<Keywords>>(json);
-                dynamic dynamicObject = JsonConvert.DeserializeObject(json);
-                dataGridView2.DataSource = dynamicObject;
-                dataGridView2.Refresh();
-            }
-            else
-            {
-                Thread.Sleep(20000);
-                goto start;
+                string jsonpath = Environment.CurrentDirectory + @"\keyword.json";
+                FileInfo f = new FileInfo(jsonpath);
+                if (!IsFileLocked(f))
+                {
+                    string json = File.ReadAllText(jsonpath);
+                    KeywordList.Clear();
+                    KeywordList = JsonConvert.DeserializeObject<List<Keywords>>(json);
+                    dynamic dynamicObject = JsonConvert.DeserializeObject(json);
+                    dataGridView2.DataSource = dynamicObject;
+                    dataGridView2.Refresh();
+                    break;
+                }
+                else
+                {
+                    Thread.Sleep(20000);
+                }
             }
         }
 
@@ -146,41 +149,6 @@ namespace crawler
             }
 
         }
-        public class Keywords
-        {
-            public int ID { get; set; }
-            public string keyword { get; set; }
-            public int count { get; set; }
-        }
-        public class PrintNumberParameters
-        {
-            public string keywords { get; set; }
-
-        }
-        public class thread
-        {
-            public int ThreadNO { get; set; }
-            public DateTime Started { get; set; }
-            public DateTime Ended { get; set; }
-            public string TimeDiff { get; set; }
-            public string Status { get; set; }
-            public string Keyword { get; set; }
-            public int Page { get; set; }
-            public int Row { get; set; }
-            public string Url { get; set; }
-            public string Exeption { get; set; }
-            public string Browser { get; set; }
-            public string PublicIpAddress { get; set; }
-            public bool Google { get; set; }
-        }
-        
-        public static  class Pages
-        {
-            public static int Row { get; set; }
-            public static int TotalRow { get; set; }
-            public static int Page { get; set; }
-            public static Keywords key { get; set; }
-        }
 
         public DateTime startd;
         public List<Thread> threads = new List<Thread>();
@@ -190,9 +158,9 @@ namespace crawler
             startd = DateTime.Now;
             lblstarttime.Text = DateTime.Now.ToString();
             timer2.Start();
-            Thread thread = new Thread(start);
-            threads.Add(thread);
-            thread.Start();
+            Thread SelfThread = new Thread(start);
+            threads.Add(SelfThread);
+            SelfThread.Start();
             timer1.Start();
         }
         private void start()
@@ -218,8 +186,8 @@ namespace crawler
                         if (nextthread == true && ThreadList.Where(c => c.Status == "Running").Count() <= 5)
                         {
                             ParameterizedThreadStart threadStart = new ParameterizedThreadStart(startthread);
-                            Thread thread = new Thread(threadStart);
-                            thread.Start(new PrintNumberParameters() { keywords = key.keyword });
+                            Thread SelfThread = new Thread(threadStart);
+                            SelfThread.Start(new PrintNumberParameters() { keywords = key.keyword });
 
                         }
                         Thread.Sleep(5000);
@@ -236,16 +204,16 @@ namespace crawler
         {
             nextthread = false;
             PrintNumberParameters parameters = (PrintNumberParameters)data;
-            thread thread = new thread();
-            thread.ThreadNO = ThreadList.Count + 1;
-            thread.Started = DateTime.Now;
-            thread.Status = "Running";
-            thread.Keyword = parameters.keywords;
-            thread.Page = 1;
-            thread.Row = 0;
-            thread.Google = true;
-            thread.PublicIpAddress = GetPublicIP();
-            ThreadList.Add(thread);
+            SelfThread SelfThread = new SelfThread();
+            SelfThread.ThreadNO = ThreadList.Count + 1;
+            SelfThread.Started = DateTime.Now;
+            SelfThread.Status = "Running";
+            SelfThread.Keyword = parameters.keywords;
+            SelfThread.Page = 1;
+            SelfThread.Row = 0;
+            SelfThread.Google = true;
+            SelfThread.PublicIpAddress = GetPublicIP();
+            ThreadList.Add(SelfThread);
 
             IWebDriver driver;
              
@@ -262,20 +230,22 @@ namespace crawler
                 service.FirefoxBinaryPath = @"C:\Program Files\Mozilla Firefox\firefox.exe";
                 service.HideCommandPromptWindow=true;               
                 driver = new FirefoxDriver(service, firefoxOptions);
-                thread.Browser = "Firefox";
+                SelfThread.Browser = "Firefox";
                 chrome = true;
             }
             else
             {
                 ChromeDriverService driverService = ChromeDriverService.CreateDefaultService();
                 driverService.HideCommandPromptWindow = true;
+
                 ChromeOptions options = new ChromeOptions();
                 options.AcceptInsecureCertificates = true;
-                //string path = Environment.CurrentDirectory + "\\vpn";
-                //options.AddExtension(path);
-                //options.AddArguments(@"load-extension=" +path);
-                driver = new ChromeDriver(driverService,options);
-                thread.Browser = "Chrome";
+
+                options.BinaryLocation = @"C:\Program Files\Google\Chrome\Application\chrome.exe"; 
+
+                driver = new ChromeDriver(driverService, options);
+                SelfThread.Browser = "Chrome";
+
                 chrome = false;
             }
 
@@ -315,7 +285,7 @@ namespace crawler
                             Thread.Sleep(2000);
                             IWebElement next = driver.FindElement(By.Id("pnnext"));
                             next.Click();
-                            thread.Page++;              
+                            SelfThread.Page++;              
                         }
                         else
                         {
@@ -330,7 +300,7 @@ namespace crawler
                 }
 
                 search:
-                if (thread.Page > 10)
+                if (SelfThread.Page > 10)
                 {
                     nextkeyword = true;
                     goto exit;
@@ -351,8 +321,8 @@ namespace crawler
                         
                     }
                     Pages.TotalRow = searchResults.Count;
-                    thread.Page = Pages.Page;
-                    thread.Row = Pages.Row;
+                    SelfThread.Page = Pages.Page;
+                    SelfThread.Row = Pages.Row;
                     
                     Thread.Sleep(1000);
                     if (searchResults[Pages.Row - 1]==null)
@@ -362,7 +332,7 @@ namespace crawler
                         goto exit;
                     }
                     searchResults[Pages.Row - 1].Click();
-                    thread.Url = driver.Url;
+                    SelfThread.Url = driver.Url;
                     Thread.Sleep(3000);
                     string a = driver.Url;
                     int b = 0;
@@ -397,8 +367,8 @@ namespace crawler
                         next.Click();
                         Pages.Page++;
                         Pages.Row = 1;
-                        thread.Page = thread.Page++;
-                        thread.Row = 1;
+                        SelfThread.Page = SelfThread.Page++;
+                        SelfThread.Row = 1;
                         Thread.Sleep(2000);
                         goto search;
                     }
@@ -449,13 +419,13 @@ namespace crawler
                         javaScript.ExecuteScript(" window.scrollTo(0,window.pageYOffset-1) ");
                     }
                     //Ping pingSender = new Ping();
-                    //PingReply reply = pingSender.Send(thread.Url);
+                    //PingReply reply = pingSender.Send(SelfThread.Url);
 
                 }
-                ReadOnlyCollection<IWebElement> eelement = driver.FindElements(By.LinkText("https://joorkadeh.com"));
+                ReadOnlyCollection<IWebElement> eelement = driver.FindElements(By.LinkText("https://dptek.ir"));
                 if (eelement.Count > 0)
                 {
-                    IWebElement next = driver.FindElement(By.LinkText("https://joorkadeh.com"));
+                    IWebElement next = driver.FindElement(By.LinkText("https://dptek.ir"));
                     next.Click();
                     Thread.Sleep(200000);
                 }
@@ -465,52 +435,52 @@ namespace crawler
                 if (!driver.Url.Contains("joorkadeh"))
                 {
                     
-                    driver.Navigate().GoToUrl("https://joorkadeh.com");
-                    thread.Url = driver.Url;
-                    thread.Google = false;
+                    driver.Navigate().GoToUrl("https://dptek.ir");
+                    SelfThread.Url = driver.Url;
+                    SelfThread.Google = false;
                     Thread.Sleep(200000);
-                    ReadOnlyCollection<IWebElement> eelent = driver.FindElements(By.PartialLinkText("https://joorkadeh.com/Home/Product"));
+                    ReadOnlyCollection<IWebElement> eelent = driver.FindElements(By.PartialLinkText("https://dptek.ir/Home/Product"));
                     if (eelent.Count > 0)
                     {
                         eelent[0].Click();
-                        thread.Url = driver.Url + driver.Url;
+                        SelfThread.Url = driver.Url + driver.Url;
                         Thread.Sleep(200000);
-                        if (driver.Url == "https://joorkadeh.com")
+                        if (driver.Url == "https://dptek.ir")
                         {
-                            driver.Navigate().GoToUrl("https://www.joorkadeh.com/Home/Product?productId=12");
-                            thread.Url = driver.Url + driver.Url;
+                            driver.Navigate().GoToUrl("https://dptek.ir/Home/Product?productId=12");
+                            SelfThread.Url = driver.Url + driver.Url;
                         }
                         Thread.Sleep(200000);
                     }
                 }
-                thread.Status = "Ended";
-                thread.Ended = DateTime.Now;
-                TimeSpan timeSpan = thread.Ended-thread.Started;
+                SelfThread.Status = "Ended";
+                SelfThread.Ended = DateTime.Now;
+                TimeSpan timeSpan = SelfThread.Ended-SelfThread.Started;
                 if (timeSpan.TotalMilliseconds<200000)
                 {
                     
                 }
-                thread.TimeDiff = timeSpan.ToString();
+                SelfThread.TimeDiff = timeSpan.ToString();
                 driver.Close();
                 driver.Dispose();
 
                 nextthread = true;
-                if (thread.Page > 10)
+                if (SelfThread.Page > 10)
                 {
                     nextkeyword = true;
                 }
             }
             catch(Exception exception)
             {
-                thread.Status = "Stopped";
-                thread.Exeption = exception.Message;
-                thread.Ended = DateTime.Now;
-                TimeSpan timeSpan = thread.Ended- thread.Started ;
-                thread.TimeDiff = timeSpan.TotalMinutes.ToString();
+                SelfThread.Status = "Stopped";
+                SelfThread.Exeption = exception.Message;
+                SelfThread.Ended = DateTime.Now;
+                TimeSpan timeSpan = SelfThread.Ended- SelfThread.Started ;
+                SelfThread.TimeDiff = timeSpan.TotalMinutes.ToString();
                 driver.Dispose();
 
                 nextthread = true;
-                if (thread.Page > 10)
+                if (SelfThread.Page > 10)
                 {
                     nextkeyword = true;
                 }
