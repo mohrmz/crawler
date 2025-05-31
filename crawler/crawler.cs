@@ -31,36 +31,80 @@ namespace crawler
         {
             InitializeComponent();
         }
-        
+
         private void crawler_Load(object sender, EventArgs e)
         {
-            foreach (Process Proc in Process.GetProcesses()) 
-                if (Proc.ProcessName.Contains("chromedriver")|| Proc.ProcessName.Contains("geckodriver"))  
-                    Proc.Kill();
+            KillOldDriverProcesses();
 
-            //this.TopMost = true;
-            if (CheckForInternetConnection())
+            if (!CheckForInternetConnection())
             {
-                lblip.Text = GetPublicIP();               
-                refreshgrid2();
-                refreshgrid1();
-         
-            }
-            else
-            {
-                lblip.Text = "You Are Not have Internet Access Please Connect To Internet and Retry";
+                lblip.Text = "دسترسی به اینترنت وجود ندارد.";
                 button1.Enabled = false;
                 button2.Enabled = false;
+                return;
             }
 
+            lblip.Text = GetPublicIP();
+            LoadKeywords();
+            UpdateGrids();
         }
+
+        private void KillOldDriverProcesses()
+        {
+            foreach (Process proc in Process.GetProcesses())
+            {
+                if (proc.ProcessName.Contains("chromedriver") || proc.ProcessName.Contains("geckodriver"))
+                {
+                    try { proc.Kill(); }
+                    catch { /* Ignored */ }
+                }
+            }
+        }
+
+        private void LoadKeywords()
+        {
+            string jsonPath = Path.Combine(Environment.CurrentDirectory, "keyword.json");
+
+            while (IsFileLocked(new FileInfo(jsonPath)))
+            {
+                Thread.Sleep(1000); // No infinite loop!
+            }
+
+            if (!File.Exists(jsonPath)) return;
+
+            string json = File.ReadAllText(jsonPath);
+            KeywordList = JsonConvert.DeserializeObject<List<Keywords>>(json) ?? new List<Keywords>();
+        }
+
+        private void UpdateGrids()
+        {
+            dataGridView2.DataSource = null;
+            dataGridView2.DataSource = KeywordList.Select(k => new { k.ID, k.keyword, k.count }).ToList();
+
+            dataGridView1.DataSource = null;
+            dataGridView1.DataSource = ThreadList.Select(t => new {
+                t.ThreadNO,
+                t.Keyword,
+                t.Status,
+                t.Page,
+                t.Row,
+                t.Url,
+                t.Browser,
+                t.PublicIpAddress,
+                t.TimeDiff
+            }).ToList();
+        }
+
+
         private static bool CheckForInternetConnection()
         {
             try
             {
                 using (var client = new WebClient())
-                using (client.OpenRead("http://google.com/generate_204"))
+                using (client.OpenRead("http://clients3.google.com/generate_204"))
+                {
                     return true;
+                }
             }
             catch
             {
@@ -72,16 +116,311 @@ namespace crawler
         {
             try
             {
-
-                return new System.Net.WebClient().DownloadString("https://ipinfo.io/ip").Replace("\n", "");
+                using (var client = new WebClient())
+                {
+                    return client.DownloadString("https://ipinfo.io/ip").Trim();
+                }
             }
             catch
             {
+                return "خطا در دریافت آی‌پی عمومی";
+            }
+        }
 
-                return "You Are Not have Internet Access Please Connect To Internet and Retry";
+        private void StartCrawlingLoop()
+        {
+            while (working)
+            {
+                var orderedKeywords = KeywordList.OrderBy(k => k.count).ToList();
+
+                foreach (var keyword in orderedKeywords)
+                {
+                    if (!working) break;
+
+                    Pages.key = keyword;
+                    Pages.Row = 1;
+                    Pages.Page = 1;
+                    Pages.TotalRow = 1;
+
+                    ProcessKeyword(keyword);
+                    keyword.count++;
+                    SaveKeywords();
+                }
+            }
+        }
+
+        private void ProcessKeyword(Keywords keyword)
+        {
+            nextkeyword = false;
+
+            while (!nextkeyword && working)
+            {
+                if (Pages.key == keyword && Pages.Page > 10)
+                {
+                    nextkeyword = true;
+                    break;
+                }
+
+                if (nextthread && ThreadList.Count(t => t.Status == "Running") < 5)
+                {
+                    var param = new PrintNumberParameters { keywords = keyword.keyword };
+                    var thread = new Thread(RunCrawlerThread);
+                    threads.Add(thread);
+                    thread.Start(param);
+                }
+
+                Thread.Sleep(3000); // نرخ طبیعی‌تر
+            }
+        }
+
+        private void RunCrawlerThread(object param)
+        {
+            nextthread = false;
+
+            var parameters = param as PrintNumberParameters;
+            var threadModel = new SelfThread
+            {
+                ThreadNO = ThreadList.Count + 1,
+                Started = DateTime.Now,
+                Status = "Running",
+                Keyword = parameters.keywords,
+                Page = 1,
+                Row = 0,
+                Google = true,
+                PublicIpAddress = GetPublicIP(),
+                Browser = chrome ? "Chrome" : "Firefox"
+            };
+            ThreadList.Add(threadModel);
+
+            IWebDriver driver = null;
+
+            try
+            {
+                driver = InitializeDriver(); // جداشده برای مدیریت مرورگر
+
+                // باز کردن گوگل
+                driver.Navigate().GoToUrl("https://www.google.com");
+                Thread.Sleep(RandomDelay());
+
+                var input = driver.FindElement(By.Name("q"));
+                input.SendKeys(parameters.keywords);
+                Thread.Sleep(RandomDelay());
+
+                input.SendKeys(OpenQA.Selenium.Keys.Enter);
+                Thread.Sleep(RandomDelay());
+
+                // بررسی کپچا
+                if (driver.PageSource.Contains("captcha") || driver.FindElements(By.Id("rc-anchor-container")).Count > 0)
+                {
+                    MessageBox.Show("شناسایی توسط گوگل. لطفاً IP یا VPN را تغییر دهید.");
+                    return;
+                }
+
+                // بررسی لینک هدف
+                SimulateSearch(driver, threadModel, parameters.keywords);
+
+                threadModel.Status = "Ended";
+                threadModel.Ended = DateTime.Now;
+                threadModel.TimeDiff = (threadModel.Ended - threadModel.Started).ToString(@"hh\:mm\:ss");
+            }
+            catch (Exception ex)
+            {
+                threadModel.Status = "Stopped";
+                threadModel.Exeption = ex.Message;
+                threadModel.Ended = DateTime.Now;
+                threadModel.TimeDiff = (threadModel.Ended - threadModel.Started).ToString(@"hh\:mm\:ss");
+            }
+            finally
+            {
+                driver?.Quit();
+                nextthread = true;
+
+                if (threadModel.Page > 10)
+                {
+                    nextkeyword = true;
+                }
+            }
+        }
+
+        private IWebDriver InitializeDriver()
+        {
+            if (!chrome && File.Exists(@"C:\Program Files\Mozilla Firefox\firefox.exe"))
+            {
+                var service = FirefoxDriverService.CreateDefaultService();
+                var options = new FirefoxOptions
+                {
+                    AcceptInsecureCertificates = true
+                };
+                service.FirefoxBinaryPath = @"C:\Program Files\Mozilla Firefox\firefox.exe";
+                service.HideCommandPromptWindow = true;
+                chrome = true;
+                return new FirefoxDriver(service, options);
+            }
+            else
+            {
+                var driverService = ChromeDriverService.CreateDefaultService();
+                var options = new ChromeOptions
+                {
+                    AcceptInsecureCertificates = true
+                };
+                options.BinaryLocation = @"C:\Program Files\Google\Chrome\Application\chrome.exe"; // تنظیم مسیر دقیق
+                driverService.HideCommandPromptWindow = true;
+                chrome = false;
+                return new ChromeDriver(driverService, options);
+            }
+        }
+
+        private int RandomDelay(int min = 1200, int max = 3000)
+        {
+            return new Random().Next(min, max);
+        }
+
+
+        private void SimulateSearch(IWebDriver driver, SelfThread thread, string keyword)
+        {
+            const string targetText = "joorkadeh";
+            const int maxPages = 10;
+
+            for (int page = 1; page <= maxPages; page++)
+            {
+                var results = driver.FindElements(By.PartialLinkText(targetText)).ToList();
+                thread.Page = page;
+                thread.Row = 1;
+
+                // فیلتر لینک‌های whois یا بی‌فایده
+                var validResults = results.Where(r =>
+                    !string.IsNullOrEmpty(r.GetAttribute("href")) &&
+                    !r.GetAttribute("href").Contains("whois")).ToList();
+
+                if (validResults.Any())
+                {
+                    var link = validResults.First();
+                    link.Click();
+                    Thread.Sleep(RandomDelay(2000, 4000));
+
+                    string newUrl = driver.Url;
+                    int tries = 0;
+
+                    // باز کلیک در صورت باز نشدن سایت هدف
+                    while (newUrl.Contains("google") && tries < 5)
+                    {
+                        link.Click();
+                        Thread.Sleep(RandomDelay());
+                        newUrl = driver.Url;
+                        tries++;
+                    }
+
+                    thread.Url = newUrl;
+                    SimulateUserScroll(driver);
+                    return;
+                }
+
+                // اگر لینک پیدا نشد و صفحه بعدی هست → رفتن به صفحه بعد
+                var nextPage = driver.FindElements(By.Id("pnnext")).FirstOrDefault();
+                if (nextPage != null)
+                {
+                    nextPage.Click();
+                    Thread.Sleep(RandomDelay(2500, 3500));
+                }
+                else
+                {
+                    nextkeyword = true;
+                    return;
+                }
             }
 
+            nextkeyword = true;
         }
+
+        private void SimulateUserScroll(IWebDriver driver)
+        {
+            var js = (IJavaScriptExecutor)driver;
+            int totalHeight = Convert.ToInt32(js.ExecuteScript("return document.body.scrollHeight"));
+
+            int scroll = 0;
+            int direction = 1;
+
+            Stopwatch sw = Stopwatch.StartNew();
+            while (sw.Elapsed.TotalSeconds < 20)
+            {
+                js.ExecuteScript($"window.scrollTo(0, {scroll});");
+                Thread.Sleep(RandomDelay(300, 600));
+
+                scroll += direction * 250;
+
+                if (scroll >= totalHeight || scroll <= 0)
+                    direction *= -1;
+            }
+        }
+
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            working = false; // همه حلقه‌ها خودشون چک می‌کنن
+
+            timer1.Stop();
+            timer2.Stop();
+
+            lblendtime.Text = DateTime.Now.ToString();
+
+            // بستن همه مرورگرها با بستن driver در thread خودش انجام میشه
+
+            // منتظر بمان تا همه threadها کارشون تموم شه
+            foreach (var thread in threads)
+            {
+                if (thread.IsAlive)
+                {
+                    thread.Join(); // صبر کن تا تموم شه
+                }
+            }
+
+            KillOldDriverProcesses();
+        }
+
+        private void timer2_Tick(object sender, EventArgs e)
+        {
+            TimeSpan duration = DateTime.Now - startd;
+            lblelapsedtime.Text = duration.ToString(@"hh\:mm\:ss");
+
+            lbltotalthread.Text = ThreadList.Count.ToString();
+            lbltotalkey.Text = KeywordList.Count.ToString();
+            lbltotalpages.Text = ThreadList.Count(t => !string.IsNullOrEmpty(t.Url)).ToString();
+            lbltotalkeyc.Text = ThreadList.Select(t => t.Keyword).Distinct().Count().ToString();
+            lblthreadfailed.Text = ThreadList.Count(t => t.Status == "Stopped").ToString();
+            lblcrawled.Text = ThreadList.Count(t => t.Status == "Ended" && t.Google == false).ToString();
+            lblrunnig.Text = ThreadList.Count(t => t.Status == "Running").ToString();
+            lblgooglecrawled.Text = ThreadList.Count(t => t.Google && t.Status != "Stopped").ToString();
+        }
+
+        private void LogThreadResultToFile(SelfThread thread)
+        {
+            string logDir = Path.Combine(Environment.CurrentDirectory, "logs");
+            Directory.CreateDirectory(logDir);
+
+            string logFile = Path.Combine(logDir, $"log_{DateTime.Now:yyyy-MM-dd}.txt");
+
+            string content = $"[{DateTime.Now:HH:mm:ss}] Thread #{thread.ThreadNO} | Keyword: {thread.Keyword} | " +
+                             $"Status: {thread.Status} | Page: {thread.Page} | Url: {thread.Url} | Time: {thread.TimeDiff}";
+
+            if (!string.IsNullOrWhiteSpace(thread.Exeption))
+                content += $" | Error: {thread.Exeption}";
+
+            File.AppendAllText(logFile, content + Environment.NewLine);
+        }
+
+
+
+        private void SaveKeywords()
+        {
+            string jsonPath = Path.Combine(Environment.CurrentDirectory, "keyword.json");
+
+            if (IsFileLocked(new FileInfo(jsonPath))) return;
+
+            string json = JsonConvert.SerializeObject(KeywordList, Formatting.Indented);
+            File.WriteAllText(jsonPath, json);
+        }
+
+
         private void refreshgrid2()
         {
             while(true)
@@ -258,7 +597,7 @@ namespace crawler
                 IWebElement element = driver.FindElement(By.Name("q"));
                 element.SendKeys(parameters.keywords);
 
-                Thread.Sleep(2000);
+                Thread.Sleep(10000);
                 IJavaScriptExecutor executor = (IJavaScriptExecutor)driver;
                 executor.ExecuteScript("document.getElementsByName('btnK')[0].click();");
 
@@ -487,41 +826,12 @@ namespace crawler
             }
         }
 
-        private void button2_Click(object sender, EventArgs e)
-        {
-            timer1.Stop();
-            timer2.Stop();
-            working = false;
-            lblendtime.Text = DateTime.Now.ToString();
-            foreach(var a in threads.Where(a=>a.IsAlive==true))
-            {
-                a.Abort();
-            }
-            foreach (Process Proc in Process.GetProcesses())
-                if (Proc.ProcessName.Contains("chromedriver") || Proc.ProcessName.Contains("geckodriver"))
-                    Proc.Kill();
-        }
-
         private void timer1_Tick(object sender, EventArgs e)
         {
             refreshgrid1();
             refreshgrid2();
         }
 
-        private void timer2_Tick(object sender, EventArgs e)
-        {
-            TimeSpan a = DateTime.Now - startd;
-            lblelapsedtime.Text = a.ToString();
-            lbltotalthread.Text = ThreadList.Count.ToString();
-            lbltotalkey.Text = KeywordList.Count.ToString();
-            lbltotalpages.Text = ThreadList.Where(c => !string.IsNullOrEmpty(c.Url)).Count().ToString();
-            lbltotalkeyc.Text = ThreadList.Select(c => c.Keyword).Distinct().Count().ToString();
-            lblthreadfailed.Text= ThreadList.Where(c => c.Status=="Stopped").Count().ToString();
-            lblcrawled.Text = ThreadList.Where(c => c.Status == "Ended"&&c.Google==false).Count().ToString();
-            lblrunnig.Text = ThreadList.Where(c => c.Status == "Running" ).Count().ToString();
-            lblgooglecrawled.Text = ThreadList.Where(c => c.Google==true&& c.Status != "Stopped").Count().ToString();
-
-        }
         protected virtual bool IsFileLocked(FileInfo file)
         {
             FileStream stream = null;
